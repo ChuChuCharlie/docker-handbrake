@@ -120,7 +120,8 @@ RUN \
         coreutils \
         findutils \
         expect \
-        xdpyinfo
+        xdpyinfo \
+        linux-firmware-amdgpu
 
 #        && \
 #    # Save some space by removing unused DRI drivers.

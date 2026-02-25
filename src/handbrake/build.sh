@@ -77,7 +77,7 @@ export CXX=xx-clang++
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-log() {
+function log {
     echo ">>> $*"
 }
 
@@ -168,6 +168,7 @@ apk --no-cache add \
     bash \
     nasm \
     meson \
+    cargo-c \
     gettext-dev \
     glib-dev \
 
@@ -212,8 +213,7 @@ xx-apk --no-cache --no-scripts add \
 USE_RUST_FROM_ALPINE_REPO=false
 if $USE_RUST_FROM_ALPINE_REPO; then
     apk --no-cache add \
-        cargo \
-        cargo-c
+        cargo
 else
     apk --no-cache add \
         gcc \
@@ -226,11 +226,6 @@ else
     #       during GTK initialization.
     #       See https://github.com/qarmin/czkawka/issues/416.
     export RUSTFLAGS="-C target-feature=-crt-static"
-
-    # Install cargo-c
-    apk --no-cache add \
-        openssl-dev
-    CC=clang CXX=clang++ cargo install cargo-c
 fi
 
 #
@@ -355,13 +350,12 @@ if [ "$(xx-info arch)" = "amd64" ]; then
     log "Patching Intel Media Driver..."
     patch -d /tmp/intel-media-driver -p1 < "$SCRIPT_DIR"/intel-media-driver-compile-fix.patch
     patch -d /tmp/gmmlib -p1 < "$SCRIPT_DIR"/gmmlib-compile-fix.patch
-    rm -rf /tmp/gmmlib/ULT
     rm -rf /tmp/intel-media-driver/media_driver/*/ult
 
     log "Configuring Intel Media driver..."
     (
         mkdir /tmp/intel-media-driver/build && \
-        cd /tmp/intel-media-driver/build && cmake -G Ninja \
+        cd /tmp/intel-media-driver/build && cmake \
             $(xx-clang --print-cmake-defines) \
             -DCMAKE_FIND_ROOT_PATH=$(xx-info sysroot) \
             -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
@@ -370,10 +364,9 @@ if [ "$(xx-info arch)" = "amd64" ]; then
             -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
             -DCMAKE_INSTALL_PREFIX=/usr \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_VERBOSE_MAKEFILE=OFF \
+            -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON \
             -Wno-dev \
             -DBUILD_TYPE=Release \
-            -DBUILD_CMRTLIB=OFF \
             -DINSTALL_DRIVER_SYSCONF=OFF \
             -DMEDIA_RUN_TEST_SUITE=OFF \
             -DSKIP_GMM_CHECK=ON \
@@ -381,10 +374,10 @@ if [ "$(xx-info arch)" = "amd64" ]; then
     )
 
     log "Compiling Intel Media driver..."
-    cmake --build /tmp/intel-media-driver/build
+    make VERBOSE=0 -C /tmp/intel-media-driver/build -j$(nproc)
 
     log "Installing Intel Media driver..."
-    DESTDIR=/tmp/handbrake-install cmake --install /tmp/intel-media-driver/build
+    make DESTDIR=/tmp/handbrake-install -C /tmp/intel-media-driver/build install
 fi
 
 if [ "$(xx-info arch)" = "amd64" ]; then
@@ -432,7 +425,7 @@ if [ "$(xx-info arch)" = "amd64" ]; then
     log "Configuring Intel oneVPL GPU Runtime..."
     (
         mkdir /tmp/oneVPL-intel-gpu/build && \
-        cd /tmp/oneVPL-intel-gpu/build && cmake -G Ninja \
+        cd /tmp/oneVPL-intel-gpu/build && cmake \
             $(xx-clang --print-cmake-defines) \
             -DCMAKE_FIND_ROOT_PATH=$(xx-info sysroot) \
             -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
@@ -446,10 +439,10 @@ if [ "$(xx-info arch)" = "amd64" ]; then
     )
 
     log "Compiling Intel oneVPL GPU Runtime..."
-    cmake --build /tmp/oneVPL-intel-gpu/build
+    make -C /tmp/oneVPL-intel-gpu/build -j$(nproc)
 
     log "Installing Intel oneVPL GPU Runtime..."
-    DESTDIR=/tmp/handbrake-install cmake --install /tmp/oneVPL-intel-gpu/build
+    make DESTDIR=/tmp/handbrake-install -C /tmp/oneVPL-intel-gpu/build install
 fi
 
 log "Patching HandBrake..."
@@ -479,9 +472,9 @@ fi
 log "Configuring HandBrake..."
 (
     if [ "$(xx-info arch)" = "amd64" ]; then
-        CONF_FLAGS="--enable-qsv --enable-vce"
+        CONF_FLAGS="--enable-qsv --enable-nvenc --enable-vce"
     else
-        CONF_FLAGS="--disable-qsv --disable-nvenc"
+        CONF_FLAGS="--disable-qsv --disable-nvenc --disable-vce"
     fi
 
     if xx-info is-cross; then
@@ -512,6 +505,7 @@ if [ "$(xx-info arch)" = "amd64" ]; then
         /tmp/handbrake-install/usr/include \
         /tmp/handbrake-install/usr/lib/*.la \
         /tmp/handbrake-install/usr/lib/libmfx.* \
+        /tmp/handbrake-install/usr/lib/libigfxcmrt.so* \
         /tmp/handbrake-install/usr/lib/dri/*.la \
         /tmp/handbrake-install/usr/lib/pkgconfig \
         /tmp/handbrake-install/usr/share/metainfo \

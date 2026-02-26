@@ -22,7 +22,7 @@ on:
 jobs:
   build:
     name: Build image
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
       - name: Free disk space
